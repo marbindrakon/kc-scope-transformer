@@ -1,4 +1,4 @@
-package com.example.keycloak.mapper;
+package com.redhat.keycloak.mapper;
 
 import java.util.ArrayList;
 import java.util.Arrays;
