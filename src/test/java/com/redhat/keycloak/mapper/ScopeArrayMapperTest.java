@@ -2,10 +2,12 @@ package com.redhat.keycloak.mapper;
 
 import java.util.List;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.keycloak.models.ProtocolMapperModel;
-import org.keycloak.representations.IDToken;
+import org.keycloak.representations.AccessToken;
+import org.keycloak.util.JsonSerialization;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -22,53 +24,55 @@ class ScopeArrayMapperTest {
 
     @Test
     void transformsMultipleScopesToArray() {
-        IDToken token = new IDToken();
-        token.setOtherClaims("scope", "openid profile email");
+        AccessToken token = new AccessToken();
+        token.setScope("openid profile email");
 
-        mapper.setClaim(token, mappingModel, null, null, null);
+        mapper.transformAccessToken(token, mappingModel, null, null, null);
 
         assertEquals(List.of("openid", "profile", "email"), token.getOtherClaims().get("scope"));
     }
 
     @Test
     void transformsSingleScopeToArray() {
-        IDToken token = new IDToken();
-        token.setOtherClaims("scope", "openid");
+        AccessToken token = new AccessToken();
+        token.setScope("openid");
 
-        mapper.setClaim(token, mappingModel, null, null, null);
+        mapper.transformAccessToken(token, mappingModel, null, null, null);
 
         assertEquals(List.of("openid"), token.getOtherClaims().get("scope"));
     }
 
     @Test
-    void noOpWhenScopeClaimIsMissing() {
-        IDToken token = new IDToken();
+    void noOpWhenScopeIsMissing() {
+        AccessToken token = new AccessToken();
         token.setOtherClaims("sub", "user123");
 
-        mapper.setClaim(token, mappingModel, null, null, null);
+        mapper.transformAccessToken(token, mappingModel, null, null, null);
 
         assertNull(token.getOtherClaims().get("scope"));
         assertEquals("user123", token.getOtherClaims().get("sub"));
     }
 
     @Test
-    void noOpWhenScopeClaimIsNotAString() {
-        IDToken token = new IDToken();
-        List<String> existingArray = List.of("openid", "profile");
-        token.setOtherClaims("scope", existingArray);
+    void handlesExtraWhitespace() {
+        AccessToken token = new AccessToken();
+        token.setScope("  openid   profile  ");
 
-        mapper.setClaim(token, mappingModel, null, null, null);
+        mapper.transformAccessToken(token, mappingModel, null, null, null);
 
-        assertSame(existingArray, token.getOtherClaims().get("scope"));
+        assertEquals(List.of("openid", "profile"), token.getOtherClaims().get("scope"));
     }
 
     @Test
-    void handlesExtraWhitespace() {
-        IDToken token = new IDToken();
-        token.setOtherClaims("scope", "  openid   profile  ");
+    void deserializerRoundTripsArrayScopeBackToString() throws Exception {
+        AccessToken token = new AccessToken();
+        token.setScope("openid profile");
 
-        mapper.setClaim(token, mappingModel, null, null, null);
+        mapper.transformAccessToken(token, mappingModel, null, null, null);
 
-        assertEquals(List.of("openid", "profile"), token.getOtherClaims().get("scope"));
+        String json = JsonSerialization.writeValueAsString(token);
+        AccessToken deserialized = JsonSerialization.readValue(json, AccessToken.class);
+
+        assertEquals("openid profile", deserialized.getScope());
     }
 }

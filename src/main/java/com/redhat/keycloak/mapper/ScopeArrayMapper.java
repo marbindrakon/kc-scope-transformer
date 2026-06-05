@@ -1,10 +1,19 @@
 package com.redhat.keycloak.mapper;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.keycloak.models.ClientSessionContext;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.ProtocolMapperModel;
@@ -12,12 +21,12 @@ import org.keycloak.models.UserSessionModel;
 import org.keycloak.protocol.oidc.mappers.AbstractOIDCProtocolMapper;
 import org.keycloak.protocol.oidc.mappers.OIDCAccessTokenMapper;
 import org.keycloak.protocol.oidc.mappers.OIDCAttributeMapperHelper;
-import org.keycloak.protocol.oidc.mappers.OIDCIDTokenMapper;
 import org.keycloak.provider.ProviderConfigProperty;
-import org.keycloak.representations.IDToken;
+import org.keycloak.representations.AccessToken;
+import org.keycloak.util.JsonSerialization;
 
 public class ScopeArrayMapper extends AbstractOIDCProtocolMapper
-        implements OIDCIDTokenMapper, OIDCAccessTokenMapper {
+        implements OIDCAccessTokenMapper {
 
     public static final String PROVIDER_ID = "oidc-scope-array-mapper";
     private static final String DISPLAY_TYPE = "Scope String to Array";
@@ -25,6 +34,8 @@ public class ScopeArrayMapper extends AbstractOIDCProtocolMapper
     private static final String HELP_TEXT = "Transforms the 'scope' claim from a space-separated string to a JSON array.";
 
     private static final List<ProviderConfigProperty> CONFIG_PROPERTIES = new ArrayList<>();
+
+    private static volatile boolean jsonModuleInjected;
 
     @Override
     public String getDisplayCategory() {
@@ -52,26 +63,61 @@ public class ScopeArrayMapper extends AbstractOIDCProtocolMapper
     }
 
     @Override
-    protected void setClaim(IDToken token, ProtocolMapperModel mappingModel,
-                            UserSessionModel userSession, KeycloakSession keycloakSession,
-                            ClientSessionContext clientSessionCtx) {
-        Object scopeClaim = token.getOtherClaims().get("scope");
-        if (!(scopeClaim instanceof String scopeString)) {
-            return;
+    public AccessToken transformAccessToken(AccessToken token, ProtocolMapperModel mappingModel,
+                                            KeycloakSession keycloakSession, UserSessionModel userSession,
+                                            ClientSessionContext clientSessionCtx) {
+        if (!jsonModuleInjected) {
+            synchronized (ScopeArrayMapper.class) {
+                if (!jsonModuleInjected) {
+                    injectAccessTokenDeserializer();
+                }
+            }
         }
 
-        List<String> scopeArray = Arrays.asList(scopeString.trim().split("\\s+"));
+        String scope = token.getScope();
+        if (scope == null || scope.isBlank()) {
+            return token;
+        }
+
+        List<String> scopeArray = Arrays.asList(scope.trim().split("\\s+"));
         token.getOtherClaims().put("scope", scopeArray);
+        return token;
     }
 
-    public static ProtocolMapperModel create(String name, boolean idToken, boolean accessToken) {
+    // Adapted from https://github.com/amiv1/keycloak-custom-scopes-extension (public domain)
+    private static void injectAccessTokenDeserializer() {
+        ObjectMapper plainMapper = new ObjectMapper();
+        SimpleModule module = new SimpleModule("access-token-scope-deserializer");
+        module.addDeserializer(AccessToken.class, new JsonDeserializer<>() {
+            @Override
+            public AccessToken deserialize(JsonParser jsonParser, DeserializationContext ctx) throws IOException {
+                ObjectMapper mapper = (ObjectMapper) jsonParser.getCodec();
+                ObjectNode root = mapper.readTree(jsonParser);
+
+                JsonNode scopeNode = root.get("scope");
+                if (scopeNode instanceof ArrayNode arrayNode) {
+                    StringBuilder sb = new StringBuilder();
+                    for (int i = 0; i < arrayNode.size(); i++) {
+                        if (i > 0) sb.append(' ');
+                        sb.append(arrayNode.get(i).asText());
+                    }
+                    root.put("scope", sb.toString());
+                }
+
+                return plainMapper.treeToValue(root, AccessToken.class);
+            }
+        });
+        JsonSerialization.mapper.registerModule(module);
+        jsonModuleInjected = true;
+    }
+
+    public static ProtocolMapperModel create(String name) {
         ProtocolMapperModel mapper = new ProtocolMapperModel();
         mapper.setName(name);
         mapper.setProtocolMapper(PROVIDER_ID);
         mapper.setProtocol("openid-connect");
         Map<String, String> config = Map.of(
-                OIDCAttributeMapperHelper.INCLUDE_IN_ID_TOKEN, String.valueOf(idToken),
-                OIDCAttributeMapperHelper.INCLUDE_IN_ACCESS_TOKEN, String.valueOf(accessToken)
+                OIDCAttributeMapperHelper.INCLUDE_IN_ACCESS_TOKEN, "true"
         );
         mapper.setConfig(config);
         return mapper;
