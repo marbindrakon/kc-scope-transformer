@@ -14,6 +14,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.keycloak.Config;
 import org.keycloak.models.ClientSessionContext;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.ProtocolMapperModel;
@@ -34,8 +35,6 @@ public class ScopeArrayMapper extends AbstractOIDCProtocolMapper
     private static final String HELP_TEXT = "Transforms the 'scope' claim from a space-separated string to a JSON array.";
 
     private static final List<ProviderConfigProperty> CONFIG_PROPERTIES = new ArrayList<>();
-
-    private static volatile boolean jsonModuleInjected;
 
     @Override
     public String getDisplayCategory() {
@@ -62,18 +61,19 @@ public class ScopeArrayMapper extends AbstractOIDCProtocolMapper
         return PROVIDER_ID;
     }
 
+    // Runs once per factory at server startup, on every replica. Registering the
+    // deserializer here (rather than lazily on first token issuance) ensures any
+    // instance can deserialize an array-scope token presented to it, even if it
+    // never issued one itself.
+    @Override
+    public void init(Config.Scope config) {
+        injectAccessTokenDeserializer();
+    }
+
     @Override
     public AccessToken transformAccessToken(AccessToken token, ProtocolMapperModel mappingModel,
                                             KeycloakSession keycloakSession, UserSessionModel userSession,
                                             ClientSessionContext clientSessionCtx) {
-        if (!jsonModuleInjected) {
-            synchronized (ScopeArrayMapper.class) {
-                if (!jsonModuleInjected) {
-                    injectAccessTokenDeserializer();
-                }
-            }
-        }
-
         String scope = token.getScope();
         if (scope == null || scope.isBlank()) {
             return token;
@@ -108,7 +108,6 @@ public class ScopeArrayMapper extends AbstractOIDCProtocolMapper
             }
         });
         JsonSerialization.mapper.registerModule(module);
-        jsonModuleInjected = true;
     }
 
     public static ProtocolMapperModel create(String name) {

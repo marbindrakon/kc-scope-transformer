@@ -65,6 +65,11 @@ class ScopeArrayMapperTest {
 
     @Test
     void deserializerRoundTripsArrayScopeBackToString() throws Exception {
+        // The deserializer is registered at factory startup via init(), not on
+        // first token issuance, so a replica can read an array-scope token it
+        // never minted. Simulate startup here instead of relying on transform.
+        mapper.init(null);
+
         AccessToken token = new AccessToken();
         token.setScope("openid profile");
 
