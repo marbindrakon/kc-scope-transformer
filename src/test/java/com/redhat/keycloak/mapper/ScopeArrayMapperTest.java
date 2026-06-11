@@ -30,6 +30,19 @@ class ScopeArrayMapperTest {
         mapper.transformAccessToken(token, mappingModel, null, null, null);
 
         assertEquals(List.of("openid", "profile", "email"), token.getOtherClaims().get("scope"));
+        assertNull(token.getScope());
+    }
+
+    @Test
+    void serializedTokenContainsExactlyOneScopeClaim() throws Exception {
+        AccessToken token = new AccessToken();
+        token.setScope("openid profile email");
+
+        mapper.transformAccessToken(token, mappingModel, null, null, null);
+
+        String json = JsonSerialization.writeValueAsString(token);
+        int occurrences = json.split("\"scope\"", -1).length - 1;
+        assertEquals(1, occurrences, "token JSON must not contain a duplicate scope claim: " + json);
     }
 
     @Test

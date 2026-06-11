@@ -6,7 +6,7 @@
 
     <groupId>com.redhat.keycloak</groupId>
     <artifactId>scope-array-mapper</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
     <packaging>jar</packaging>
 
     <name>Keycloak Scope Array Mapper</name>
