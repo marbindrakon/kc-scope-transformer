@@ -80,6 +80,9 @@ public class ScopeArrayMapper extends AbstractOIDCProtocolMapper
         }
 
         List<String> scopeArray = Arrays.asList(scope.trim().split("\\s+"));
+        // Clear the native field: it serializes via its own getter, so leaving it
+        // set would emit a second, duplicate "scope" key alongside the array.
+        token.setScope(null);
         token.getOtherClaims().put("scope", scopeArray);
         return token;
     }
