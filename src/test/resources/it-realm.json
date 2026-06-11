@@ -1,0 +1,47 @@
+{
+  "realm": "it",
+  "enabled": true,
+  "clients": [
+    {
+      "clientId": "test-client",
+      "secret": "test-secret",
+      "enabled": true,
+      "publicClient": false,
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": false,
+      "protocolMappers": [
+        {
+          "name": "scope-array",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-scope-array-mapper",
+          "config": {}
+        },
+        {
+          "name": "self-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "test-client",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "alice",
+      "enabled": true,
+      "email": "alice@example.com",
+      "emailVerified": true,
+      "firstName": "Alice",
+      "lastName": "Tester",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "alice-password"
+        }
+      ]
+    }
+  ]
+}
